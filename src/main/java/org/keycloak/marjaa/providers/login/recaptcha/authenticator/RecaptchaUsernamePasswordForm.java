@@ -40,7 +40,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 
 	@Override
 	protected Response createLoginForm( LoginFormsProvider form ) {
-		applyRecaptcha(null, form);
+		applyCaptcha(null, form);
 		return super.createLoginForm( form );
 	}
 
@@ -50,7 +50,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		if (logger.isInfoEnabled()) {
 			logger.info("validateRecaptcha(AuthenticationFlowContext, boolean, String, String) - Before the validation");
 		}
-		loadRecaptchaConfig(context);
+		loadConfig(context);
 
 		AuthenticatorConfigModel captchaConfig = context.getAuthenticatorConfig();
 		LoginFormsProvider form = context.form();
@@ -62,7 +62,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 			return;
 		}
 
-		applyRecaptcha(context, form);
+		applyCaptcha(context, form);
 		super.authenticate(context);
 	}
 
@@ -72,7 +72,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 			logger.debug("action(AuthenticationFlowContext) - start");
 		}
 		logger.debug(context.getHttpRequest());
-		loadRecaptchaConfig(context);
+		loadConfig(context);
 
 		MultivaluedMap<String, String> formData = context.getHttpRequest().getDecodedFormParameters();
 		context.getEvent().detail(Details.AUTH_METHOD, "auth_method");
@@ -86,12 +86,12 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		if (!success) {
 			context.getEvent().error(Messages.RECAPTCHA_FAILED);
 			// Response challengeResponse = context.form().setError(Messages.RECAPTCHA_FAILED).createLoginUsernamePassword();
-			Response challengeResponse = applyRecaptcha(context).setError(Messages.RECAPTCHA_FAILED).createLoginUsernamePassword();
+			Response challengeResponse = applyCaptcha(context).setError(Messages.RECAPTCHA_FAILED).createLoginUsernamePassword();
 			context.forceChallenge(challengeResponse);
 			return;
 		}
 
-    applyRecaptcha(context);
+    applyCaptcha(context);
 
 		if (!super.validateForm(context, formData)) {
 			return;
@@ -103,7 +103,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		context.success();
 	}
 
-	private void loadRecaptchaConfig(AuthenticationFlowContext context){
+	private void loadConfig(AuthenticationFlowContext context){
 		if (context == null){
 			return;
 		}
@@ -111,17 +111,17 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
     captchaConfig = context.getAuthenticatorConfig();
 	}
 
-	private LoginFormsProvider applyRecaptcha(AuthenticationFlowContext context) {
+	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context) {
     LoginFormsProvider form = context.form();
-		return applyRecaptcha(context, form);
+		return applyCaptcha(context, form);
 	}
 
-	private LoginFormsProvider applyRecaptcha(LoginFormsProvider form) {
-		return applyRecaptcha(null, form);
+	private LoginFormsProvider applyCaptcha(LoginFormsProvider form) {
+		return applyCaptcha(null, form);
 	}
 
-	private LoginFormsProvider applyRecaptcha(AuthenticationFlowContext context, LoginFormsProvider form) {
-		loadRecaptchaConfig(context);
+	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context, LoginFormsProvider form) {
+		loadConfig(context);
     
     siteKey = captchaConfig.getConfig().get(SITE_KEY);
 
