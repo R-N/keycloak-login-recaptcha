@@ -73,7 +73,7 @@ public class RecaptchaUsernamePasswordFormFactory  implements AuthenticatorFacto
         return "Validates a username and password from login form + google recaptcha";
     }
 
-	private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = new ArrayList<>();
+    private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = new ArrayList<>();
 
     static {
         ProviderConfigProperty property;
@@ -92,17 +92,31 @@ public class RecaptchaUsernamePasswordFormFactory  implements AuthenticatorFacto
         CONFIG_PROPERTIES.add(property);
 
         property = new ProviderConfigProperty();
+        property.setName(RecaptchaUsernamePasswordForm.ACTION);
+        property.setLabel("Recaptcha Action");
+        property.setType(ProviderConfigProperty.STRING_TYPE);
+        property.setHelpText("Google Recaptcha Action");
+        CONFIG_PROPERTIES.add(property);
+
+        property = new ProviderConfigProperty();
         property.setName(RecaptchaUsernamePasswordForm.USE_RECAPTCHA_NET);
         property.setLabel("use recaptcha.net");
         property.setType(ProviderConfigProperty.BOOLEAN_TYPE);
         property.setHelpText("Use recaptcha.net? (or else google.com)");
         CONFIG_PROPERTIES.add(property);
+
+        property = new ProviderConfigProperty();
+        property.setName(RecaptchaUsernamePasswordForm.INVISIBLE);
+        property.setLabel("use recaptcha v3");
+        property.setType(ProviderConfigProperty.BOOLEAN_TYPE);
+        property.setHelpText("Use recaptcha v3?");
+        CONFIG_PROPERTIES.add(property);
     }
 
-	@Override
-	public List<ProviderConfigProperty> getConfigProperties() {
-		return CONFIG_PROPERTIES;
-	}
+    @Override
+    public List<ProviderConfigProperty> getConfigProperties() {
+        return CONFIG_PROPERTIES;
+    }
 
     @Override
     public boolean isUserSetupAllowed() {

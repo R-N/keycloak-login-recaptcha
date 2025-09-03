@@ -32,10 +32,14 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 	public static final String SITE_KEY = "site.key";
 	public static final String SITE_SECRET = "secret";
 	public static final String USE_RECAPTCHA_NET = "useRecaptchaNet";
+	public static final String ACTION = "action";
+	public static final String INVISIBLE = "recaptcha.v3";
 	private static final Logger logger = Logger.getLogger(RecaptchaUsernamePasswordForm.class);
 
 	private String siteKey;
 	private String userLanguageTag;
+	private String action;
+	private boolean invisible;
 	private AuthenticatorConfigModel captchaConfig;
 
 	@Override
@@ -81,7 +85,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		String secret = captchaConfig.getConfig().get(SITE_SECRET);
 		String captcha = formData.getFirst(G_RECAPTCHA_RESPONSE);
 
-    boolean success = !Validation.isBlank(captcha) && validateRecaptcha(context, false, captcha, secret);
+		boolean success = !Validation.isBlank(captcha) && validateRecaptcha(context, false, captcha, secret);
 
 		if (!success) {
 			context.getEvent().error(Messages.RECAPTCHA_FAILED);
@@ -91,7 +95,7 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 			return;
 		}
 
-    applyCaptcha(context);
+		applyCaptcha(context);
 
 		if (!super.validateForm(context, formData)) {
 			return;
@@ -107,29 +111,17 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		if (context == null){
 			return;
 		}
-    userLanguageTag = context.getSession().getContext().resolveLocale(context.getUser()).toLanguageTag();
-    captchaConfig = context.getAuthenticatorConfig();
+		userLanguageTag = context.getSession().getContext().resolveLocale(context.getUser()).toLanguageTag();
+		captchaConfig = context.getAuthenticatorConfig();
 	}
 
 	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context) {
-    LoginFormsProvider form = context.form();
+		LoginFormsProvider form = context.form();
 		return applyCaptcha(context, form);
 	}
 
 	private LoginFormsProvider applyCaptcha(LoginFormsProvider form) {
 		return applyCaptcha(null, form);
-	}
-
-	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context, LoginFormsProvider form) {
-		loadConfig(context);
-    
-    siteKey = captchaConfig.getConfig().get(SITE_KEY);
-
-    form.setAttribute("recaptchaRequired", true);
-    form.setAttribute("recaptchaSiteKey", siteKey);
-    form.addScript("https://www." + getRecaptchaDomain(captchaConfig) + "/recaptcha/api.js?hl=" + userLanguageTag);
-
-    return form;
 	}
 
 	private String getRecaptchaDomain(AuthenticatorConfigModel config) {
@@ -142,6 +134,26 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		}
 
 		return "google.com";
+	}
+
+	protected String getScriptUrl(AuthenticatorConfigModel config, String userLanguageTag) {
+			return "https://www." + getRecaptchaDomain(config) + "/recaptcha/api.js?hl=" + userLanguageTag;
+	}
+
+	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context, LoginFormsProvider form) {
+		loadConfig(context);
+		
+		siteKey = captchaConfig.getConfig().get(SITE_KEY);
+		action = captchaConfig.getConfig().get(ACTION);
+		invisible = Boolean.valueOf(captchaConfig.getConfig().get(INVISIBLE));
+
+		form.setAttribute("recaptchaRequired", true);
+		form.setAttribute("recaptchaSiteKey", siteKey);
+		form.setAttribute("recaptchaAction", action);
+		form.setAttribute("recaptchaVisible", !invisible);
+		form.addScript(getScriptUrl(captchaConfig, userLanguageTag)); 
+
+		return form;
 	}
 
 	protected boolean validateRecaptcha(AuthenticationFlowContext context, boolean success, String captcha, String secret) {
