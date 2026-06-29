@@ -1,6 +1,6 @@
 # keycloak-login-recaptcha
 
-By default Keycloak (up to 12) only supports ReCaptcha for Registration, not login. so we created a simple module for activating recaptcha for login
+By default Keycloak (up to 12) only supports ReCaptcha for Registration, not login. so i modify a simple module for activating recaptcha for login
 
 ### Tested at keycloak version 24.0.5
 
