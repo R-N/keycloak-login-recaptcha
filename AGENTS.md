@@ -23,7 +23,7 @@ docker-compose up          # starts Keycloak with jar + theme + realm mounted
 Three pieces must stay in sync — Java authenticator, SPI registration, FreeMarker template.
 
 1. **`RecaptchaUsernamePasswordForm`** (`src/main/java/.../authenticator/`) — extends Keycloak's `UsernamePasswordForm`. Wraps stock username/password flow with a captcha layer:
-   - `authenticate` → `applyCaptcha` pushes captcha attributes + reCAPTCHA `api.js` script into the form before delegating to `super.authenticate`.
+   - `authenticate` → `applyCaptcha` pushes captcha attributes + reCAPTCHA `api.js` script into the form before delegating to `super.authenticate`. No `createLoginForm` override needed: `context.form()` is memoized per request, so base `authenticate()`'s internal `createLoginForm` hook renders the same form instance `applyCaptcha` already stamped.
    - `action` → reads `g-recaptcha-response` from POST, verifies server-side via `POST /recaptcha/api/siteverify` (`validateRecaptcha`), then delegates to `super.validateForm`. Failure forces re-challenge with `Messages.RECAPTCHA_FAILED`. For v3, verify also enforces `score >= score.threshold` and (if set) action match — not just `success`.
    - Config keys (constants): `site.key`, `secret`, `action`, `useRecaptchaNet` (google.com vs recaptcha.net), `recaptcha.v3` (INVISIBLE), `score.threshold` (v3, default 0.5), `size` (v2 widget, normal/compact).
    - **Stateless by contract**: factory shares one `SINGLETON` across all requests — hold no per-request instance fields, read everything from context/form per call.
