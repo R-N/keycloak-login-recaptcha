@@ -34,7 +34,8 @@
     <packaging>jar</packaging>
 
     <properties>
-        <java.version>1.8</java.version>
+        <java.version>17</java.version>
+        <maven.compiler.release>17</maven.compiler.release>
         <version.keycloak>24.0.5</version.keycloak>
 <!--        <version.jboss>3.3.0.Final</version.jboss>-->
 <!--        <version.jboss-ejb-api>1.0.0.Final</version.jboss-ejb-api>-->
@@ -81,15 +82,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.wildfly.plugins</groupId>
-                <artifactId>wildfly-maven-plugin</artifactId>
-                <configuration>
-                    <skip>false</skip>
+                    <release>17</release>
                 </configuration>
             </plugin>
         </plugins>

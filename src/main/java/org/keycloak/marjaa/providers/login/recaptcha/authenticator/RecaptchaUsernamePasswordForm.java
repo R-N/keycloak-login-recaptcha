@@ -8,7 +8,6 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.message.BasicNameValuePair;
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.AuthenticationFlowContext;
-import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
 import org.keycloak.authentication.authenticators.browser.UsernamePasswordForm;
 import org.keycloak.connections.httpclient.HttpClientProvider;
@@ -20,48 +19,46 @@ import org.keycloak.services.ServicesLogger;
 import org.keycloak.services.messages.Messages;
 import org.keycloak.services.validation.Validation;
 import org.keycloak.util.JsonSerialization;
-import org.keycloak.models.utils.FormMessage;
 
-import  jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import java.io.InputStream;
-import java.util.*;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
-public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implements Authenticator{
+/**
+ * Username/password authenticator that additionally validates a Google reCAPTCHA
+ * response (v2 checkbox or v3 invisible) before delegating to the standard form.
+ *
+ * NOTE: a single instance is shared across all requests (see the factory SINGLETON),
+ * so this class MUST remain stateless. All per-request state is read from the
+ * AuthenticationFlowContext / form; never store it in instance fields.
+ */
+public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implements Authenticator {
 	public static final String G_RECAPTCHA_RESPONSE = "g-recaptcha-response";
 	public static final String SITE_KEY = "site.key";
 	public static final String SITE_SECRET = "secret";
 	public static final String USE_RECAPTCHA_NET = "useRecaptchaNet";
 	public static final String ACTION = "action";
 	public static final String INVISIBLE = "recaptcha.v3";
+	public static final String SCORE_THRESHOLD = "score.threshold";
+	public static final String SIZE = "size";
+
+	public static final double DEFAULT_SCORE_THRESHOLD = 0.5d;
+	public static final String DEFAULT_SIZE = "normal";
+
 	private static final Logger logger = Logger.getLogger(RecaptchaUsernamePasswordForm.class);
-
-	private String siteKey;
-	private String userLanguageTag;
-	private String action;
-	private boolean invisible;
-	private AuthenticatorConfigModel captchaConfig;
-
-	@Override
-	protected Response createLoginForm( LoginFormsProvider form ) {
-		applyCaptcha(null, form);
-		return super.createLoginForm( form );
-	}
 
 	@Override
 	public void authenticate(AuthenticationFlowContext context) {
 		context.getEvent().detail(Details.AUTH_METHOD, "auth_method");
-		if (logger.isInfoEnabled()) {
-			logger.info("validateRecaptcha(AuthenticationFlowContext, boolean, String, String) - Before the validation");
-		}
-		loadConfig(context);
 
 		AuthenticatorConfigModel captchaConfig = context.getAuthenticatorConfig();
 		LoginFormsProvider form = context.form();
 
-		if (captchaConfig == null || captchaConfig.getConfig() == null
-				|| captchaConfig.getConfig().get(SITE_KEY) == null
-				|| captchaConfig.getConfig().get(SITE_SECRET) == null) {
+		if (notConfigured(captchaConfig)) {
 			form.addError(new FormMessage(null, Messages.RECAPTCHA_NOT_CONFIGURED));
 			return;
 		}
@@ -72,91 +69,99 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 
 	@Override
 	public void action(AuthenticationFlowContext context) {
-		if (logger.isDebugEnabled()) {
-			logger.debug("action(AuthenticationFlowContext) - start");
-		}
-		logger.debug(context.getHttpRequest());
-		loadConfig(context);
-
 		MultivaluedMap<String, String> formData = context.getHttpRequest().getDecodedFormParameters();
 		context.getEvent().detail(Details.AUTH_METHOD, "auth_method");
 
 		AuthenticatorConfigModel captchaConfig = context.getAuthenticatorConfig();
-		String secret = captchaConfig.getConfig().get(SITE_SECRET);
-		String captcha = formData.getFirst(G_RECAPTCHA_RESPONSE);
-
-		boolean success = !Validation.isBlank(captcha) && validateRecaptcha(context, false, captcha, secret);
-
-		if (!success) {
-			context.getEvent().error(Messages.RECAPTCHA_FAILED);
-			// Response challengeResponse = context.form().setError(Messages.RECAPTCHA_FAILED).createLoginUsernamePassword();
-			Response challengeResponse = applyCaptcha(context).setError(Messages.RECAPTCHA_FAILED).createLoginUsernamePassword();
+		if (notConfigured(captchaConfig)) {
+			Response challengeResponse = applyCaptcha(context, context.form())
+					.addError(new FormMessage(null, Messages.RECAPTCHA_NOT_CONFIGURED))
+					.createLoginUsernamePassword();
 			context.forceChallenge(challengeResponse);
 			return;
 		}
 
-		applyCaptcha(context);
+		Map<String, String> config = captchaConfig.getConfig();
+		String secret = config.get(SITE_SECRET);
+		boolean invisible = Boolean.parseBoolean(config.get(INVISIBLE));
+		String expectedAction = config.get(ACTION);
+		double scoreThreshold = parseScoreThreshold(config.get(SCORE_THRESHOLD));
+		String captcha = formData.getFirst(G_RECAPTCHA_RESPONSE);
+
+		boolean success = !Validation.isBlank(captcha)
+				&& validateRecaptcha(context, captcha, secret, invisible, expectedAction, scoreThreshold);
+
+		if (!success) {
+			context.getEvent().error(Messages.RECAPTCHA_FAILED);
+			Response challengeResponse = applyCaptcha(context, context.form())
+					.setError(Messages.RECAPTCHA_FAILED)
+					.createLoginUsernamePassword();
+			context.forceChallenge(challengeResponse);
+			return;
+		}
 
 		if (!super.validateForm(context, formData)) {
 			return;
-		}
-		if (logger.isDebugEnabled()) {
-			logger.debug("action(AuthenticationFlowContext) - success");
 		}
 
 		context.success();
 	}
 
-	private void loadConfig(AuthenticationFlowContext context){
-		if (context == null){
-			return;
+	private boolean notConfigured(AuthenticatorConfigModel captchaConfig) {
+		return captchaConfig == null
+				|| captchaConfig.getConfig() == null
+				|| captchaConfig.getConfig().get(SITE_KEY) == null
+				|| captchaConfig.getConfig().get(SITE_SECRET) == null;
+	}
+
+	private double parseScoreThreshold(String raw) {
+		if (Validation.isBlank(raw)) {
+			return DEFAULT_SCORE_THRESHOLD;
 		}
-		userLanguageTag = context.getSession().getContext().resolveLocale(context.getUser()).toLanguageTag();
-		captchaConfig = context.getAuthenticatorConfig();
-	}
-
-	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context) {
-		LoginFormsProvider form = context.form();
-		return applyCaptcha(context, form);
-	}
-
-	private LoginFormsProvider applyCaptcha(LoginFormsProvider form) {
-		return applyCaptcha(null, form);
+		try {
+			return Double.parseDouble(raw.trim());
+		} catch (NumberFormatException e) {
+			logger.warnf("Invalid reCAPTCHA score.threshold '%s', falling back to %s", raw, DEFAULT_SCORE_THRESHOLD);
+			return DEFAULT_SCORE_THRESHOLD;
+		}
 	}
 
 	private String getRecaptchaDomain(AuthenticatorConfigModel config) {
-		Boolean useRecaptcha = Optional.ofNullable(config)
-				.map(configModel -> configModel.getConfig())
-				.map(cfg -> Boolean.valueOf(cfg.get(USE_RECAPTCHA_NET)))
+		boolean useRecaptchaNet = Optional.ofNullable(config)
+				.map(AuthenticatorConfigModel::getConfig)
+				.map(cfg -> Boolean.parseBoolean(cfg.get(USE_RECAPTCHA_NET)))
 				.orElse(false);
-		if (useRecaptcha) {
-			return "recaptcha.net";
-		}
-
-		return "google.com";
+		return useRecaptchaNet ? "recaptcha.net" : "google.com";
 	}
 
-	protected String getScriptUrl(AuthenticatorConfigModel config, String userLanguageTag) {
-			return "https://www." + getRecaptchaDomain(config) + "/recaptcha/api.js?hl=" + userLanguageTag;
+	protected String getScriptUrl(AuthenticatorConfigModel config, String userLanguageTag, boolean invisible, String siteKey) {
+		String base = "https://www." + getRecaptchaDomain(config) + "/recaptcha/api.js";
+		// v3 requires the site key up front to render/execute; v2 just needs the language hint.
+		return invisible ? base + "?render=" + siteKey : base + "?hl=" + userLanguageTag;
 	}
 
 	private LoginFormsProvider applyCaptcha(AuthenticationFlowContext context, LoginFormsProvider form) {
-		loadConfig(context);
-		
-		siteKey = captchaConfig.getConfig().get(SITE_KEY);
-		action = captchaConfig.getConfig().get(ACTION);
-		invisible = Boolean.valueOf(captchaConfig.getConfig().get(INVISIBLE));
+		AuthenticatorConfigModel captchaConfig = context.getAuthenticatorConfig();
+		Map<String, String> config = captchaConfig.getConfig();
+
+		String siteKey = config.get(SITE_KEY);
+		String action = config.get(ACTION);
+		boolean invisible = Boolean.parseBoolean(config.get(INVISIBLE));
+		String size = Validation.isBlank(config.get(SIZE)) ? DEFAULT_SIZE : config.get(SIZE);
+		String userLanguageTag = context.getSession().getContext().resolveLocale(context.getUser()).toLanguageTag();
 
 		form.setAttribute("recaptchaRequired", true);
 		form.setAttribute("recaptchaSiteKey", siteKey);
 		form.setAttribute("recaptchaAction", action);
 		form.setAttribute("recaptchaVisible", !invisible);
-		form.addScript(getScriptUrl(captchaConfig, userLanguageTag)); 
+		form.setAttribute("recaptchaSize", size);
+		form.addScript(getScriptUrl(captchaConfig, userLanguageTag, invisible, siteKey));
 
 		return form;
 	}
 
-	protected boolean validateRecaptcha(AuthenticationFlowContext context, boolean success, String captcha, String secret) {
+	protected boolean validateRecaptcha(AuthenticationFlowContext context, String captcha, String secret,
+			boolean invisible, String expectedAction, double scoreThreshold) {
 		HttpClient httpClient = context.getSession().getProvider(HttpClientProvider.class).getHttpClient();
 		HttpPost post = new HttpPost("https://www." + getRecaptchaDomain(context.getAuthenticatorConfig()) + "/recaptcha/api/siteverify");
 		List<NameValuePair> formparams = new LinkedList<>();
@@ -164,21 +169,35 @@ public class RecaptchaUsernamePasswordForm extends UsernamePasswordForm implemen
 		formparams.add(new BasicNameValuePair("response", captcha));
 		formparams.add(new BasicNameValuePair("remoteip", context.getConnection().getRemoteAddr()));
 		try {
-			UrlEncodedFormEntity form = new UrlEncodedFormEntity(formparams, "UTF-8");
-			post.setEntity(form);
+			post.setEntity(new UrlEncodedFormEntity(formparams, "UTF-8"));
 			HttpResponse response = httpClient.execute(post);
-			InputStream content = response.getEntity().getContent();
-			try {
-				Map json = JsonSerialization.readValue(content, Map.class);
-				Object val = json.get("success");
-				success = Boolean.TRUE.equals(val);
-			} finally {
-				content.close();
+			try (InputStream content = response.getEntity().getContent()) {
+				@SuppressWarnings("unchecked")
+				Map<String, Object> json = JsonSerialization.readValue(content, Map.class);
+
+				if (!Boolean.TRUE.equals(json.get("success"))) {
+					logger.debugf("reCAPTCHA verification unsuccessful: %s", json.get("error-codes"));
+					return false;
+				}
+
+				// v2 (checkbox) is a pass/fail; v3 returns a risk score and the action name.
+				if (invisible) {
+					double score = json.get("score") instanceof Number ? ((Number) json.get("score")).doubleValue() : 0.0d;
+					if (score < scoreThreshold) {
+						logger.warnf("reCAPTCHA v3 score %s below threshold %s", score, scoreThreshold);
+						return false;
+					}
+					Object returnedAction = json.get("action");
+					if (!Validation.isBlank(expectedAction) && returnedAction != null && !expectedAction.equals(returnedAction)) {
+						logger.warnf("reCAPTCHA action mismatch: expected '%s' but got '%s'", expectedAction, returnedAction);
+						return false;
+					}
+				}
+				return true;
 			}
 		} catch (Exception e) {
 			ServicesLogger.LOGGER.recaptchaFailed(e);
 		}
-		return success;
+		return false;
 	}
-
 }

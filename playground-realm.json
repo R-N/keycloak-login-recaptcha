@@ -592,7 +592,7 @@
     "contentSecurityPolicyReportOnly": "",
     "xContentTypeOptions": "nosniff",
     "xRobotsTag": "none",
-    "xFrameOptions": "ALLOW-FROM https://www.google.com",
+    "xFrameOptions": "SAMEORIGIN",
     "contentSecurityPolicy": "frame-src 'self' https://www.google.com; frame-ancestors 'self'; object-src 'none';",
     "xXSSProtection": "1; mode=block",
     "strictTransportSecurity": "max-age=31536000; includeSubDomains"

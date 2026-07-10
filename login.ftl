@@ -47,11 +47,32 @@
 
                     </div>
                     <#if recaptchaRequired??>
-                        <div class="form-group">
-                            <div class="${properties.kcInputWrapperClass!}">
-                                <div class="g-recaptcha" data-size="compact" data-sitekey="${recaptchaSiteKey}"></div>
+                        <#if recaptchaVisible!true>
+                            <div class="form-group">
+                                <div class="${properties.kcInputWrapperClass!}">
+                                    <div class="g-recaptcha" data-size="${recaptchaSize!"normal"}" data-sitekey="${recaptchaSiteKey}"></div>
+                                </div>
                             </div>
-                        </div>
+                        <#else>
+                            <input type="hidden" id="g-recaptcha-response" name="g-recaptcha-response"/>
+                            <script>
+                                (function () {
+                                    var form = document.getElementById('kc-form-login');
+                                    if (!form) { return; }
+                                    form.addEventListener('submit', function (e) {
+                                        var field = document.getElementById('g-recaptcha-response');
+                                        if (field && field.value) { return; }
+                                        e.preventDefault();
+                                        grecaptcha.ready(function () {
+                                            grecaptcha.execute('${recaptchaSiteKey}', {action: '${recaptchaAction!"login"}'}).then(function (token) {
+                                                field.value = token;
+                                                form.submit();
+                                            });
+                                        });
+                                    });
+                                })();
+                            </script>
+                        </#if>
                     </#if>
 
                     <div class="${properties.kcFormGroupClass!} ${properties.kcFormSettingClass!}">

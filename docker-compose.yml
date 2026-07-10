@@ -1,16 +1,17 @@
-version: '3'
-
 services:
   keycloak:
-    image: jboss/keycloak
+    image: quay.io/keycloak/keycloak:24.0.5
     restart: always
+    command: start-dev --import-realm
     environment:
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: admin
-      KEYCLOAK_IMPORT: /tmp/playground-realm.json
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
     volumes:
-      - ./playground-realm.json:/tmp/playground-realm.json
-      - ./login.ftl:/opt/jboss/keycloak/themes/base/login/login.ftl
-      - ./target/recaptcha-login.jar:/opt/jboss/keycloak/standalone/deployments/recaptcha-login.jar
+      # Provider jar — Quarkus distro auto-detects jars in /opt/keycloak/providers
+      - ./target/recaptcha-login.jar:/opt/keycloak/providers/recaptcha-login.jar
+      # Overridden base login theme (start-dev disables theme cache, so edits apply live)
+      - ./login.ftl:/opt/keycloak/themes/base/login/login.ftl
+      # Realm imported on startup via --import-realm
+      - ./playground-realm.json:/opt/keycloak/data/import/playground-realm.json
     ports:
       - 8080:8080

@@ -111,6 +111,23 @@ public class RecaptchaUsernamePasswordFormFactory  implements AuthenticatorFacto
         property.setType(ProviderConfigProperty.BOOLEAN_TYPE);
         property.setHelpText("Use recaptcha v3?");
         CONFIG_PROPERTIES.add(property);
+
+        property = new ProviderConfigProperty();
+        property.setName(RecaptchaUsernamePasswordForm.SCORE_THRESHOLD);
+        property.setLabel("Recaptcha v3 score threshold");
+        property.setType(ProviderConfigProperty.STRING_TYPE);
+        property.setDefaultValue(String.valueOf(RecaptchaUsernamePasswordForm.DEFAULT_SCORE_THRESHOLD));
+        property.setHelpText("Minimum score (0.0-1.0) required to pass reCAPTCHA v3. Ignored for v2. Default 0.5.");
+        CONFIG_PROPERTIES.add(property);
+
+        property = new ProviderConfigProperty();
+        property.setName(RecaptchaUsernamePasswordForm.SIZE);
+        property.setLabel("Recaptcha v2 widget size");
+        property.setType(ProviderConfigProperty.LIST_TYPE);
+        property.setOptions(java.util.Arrays.asList("normal", "compact"));
+        property.setDefaultValue(RecaptchaUsernamePasswordForm.DEFAULT_SIZE);
+        property.setHelpText("Size of the reCAPTCHA v2 checkbox widget. Ignored for v3.");
+        CONFIG_PROPERTIES.add(property);
     }
 
     @Override
